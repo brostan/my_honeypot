@@ -1,0 +1,131 @@
+---
+version: '3.8'
+
+volumes:
+  cowrie-etc:
+  cowrie-var:
+  elasticsearch-data:
+  grafana-data:
+
+networks:
+  honeypot-network:
+    driver: bridge
+
+services:
+  # Cowrie SSH/Telnet Honeypot
+  cowrie:
+    build:
+      context: ./cowrie
+      dockerfile: docker/Dockerfile
+    container_name: cowrie-honeypot
+    restart: unless-stopped
+    ports:
+      - "2222:2222"  # SSH
+      - "2223:2223"  # Telnet
+    volumes:
+      - cowrie-etc:/cowrie/cowrie-git/etc
+      - cowrie-var:/cowrie/cowrie-git/var
+      - ./cowrie/etc/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+      - ./cowrie/etc/userdb.txt:/cowrie/cowrie-git/etc/userdb.txt:ro
+    networks:
+      - honeypot-network
+    environment:
+      - TZ=UTC
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 2222)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Elasticsearch for log storage and analysis
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: cowrie-elasticsearch
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - honeypot-network
+    ports:
+      - "9200:9200"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Kibana for log visualization
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: cowrie-kibana
+    restart: unless-stopped
+    ports:
+      - "5601:5601"
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    networks:
+      - honeypot-network
+    depends_on:
+      - elasticsearch
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Grafana for advanced visualization and dashboards
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cowrie-grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_INSTALL_PLUGINS=grafana-elasticsearch-datasource
+    volumes:
+      - grafana-data:/var/lib/grafana
+    networks:
+      - honeypot-network
+    depends_on:
+      - elasticsearch
+
+  # Logstash for processing Cowrie logs
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.11.0
+    container_name: cowrie-logstash
+    restart: unless-stopped
+    volumes:
+      - ./logstash/pipeline:/usr/share/logstash/pipeline:ro
+      - cowrie-var:/cowrie-logs:ro
+    networks:
+      - honeypot-network
+    depends_on:
+      - elasticsearch
+      - cowrie
+    environment:
+      - "LS_JAVA_OPTS=-Xms256m -Xmx256m"
+
+  # Portainer for easy container management (optional)
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: cowrie-portainer
+    restart: unless-stopped
+    ports:
+      - "9443:9443"
+      - "8000:8000"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer-data:/data
+    networks:
+      - honeypot-network
+
+volumes:
+  portainer-data:
+

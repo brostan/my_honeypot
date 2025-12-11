@@ -1,0 +1,49 @@
+---
+# Simple Docker Compose for Cowrie only (no monitoring stack)
+# Use this if you just want to run the honeypot without additional services
+# Usage: docker-compose -f docker-compose.simple.yml up -d
+
+version: '3.8'
+
+volumes:
+  cowrie-etc:
+  cowrie-var:
+
+networks:
+  honeypot-network:
+    driver: bridge
+
+services:
+  cowrie:
+    build:
+      context: ./cowrie
+      dockerfile: docker/Dockerfile
+    container_name: cowrie-honeypot
+    restart: unless-stopped
+    ports:
+      # Map to standard ports if you want (requires root or CAP_NET_BIND_SERVICE)
+      # For production, use iptables to redirect 22->2222 and 23->2223
+      - "2222:2222"  # SSH
+      - "2223:2223"  # Telnet
+    volumes:
+      - cowrie-etc:/cowrie/cowrie-git/etc
+      - cowrie-var:/cowrie/cowrie-git/var
+      # Mount custom configuration
+      - ./cowrie/etc/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg:ro
+      - ./cowrie/etc/userdb.txt:/cowrie/cowrie-git/etc/userdb.txt:ro
+    networks:
+      - honeypot-network
+    environment:
+      - TZ=UTC
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s=socket.socket(); s.connect(('localhost', 2222)); s.close()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+

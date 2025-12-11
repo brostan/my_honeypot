@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+cowrie-env/
+venv/
+ENV/
+env/
+
+# Cowrie specific
+cowrie/var/log/
+cowrie/var/lib/cowrie/downloads/
+cowrie/var/lib/cowrie/tty/
+cowrie/var/run/
+*.log
+*.json
+*.pickle
+
+# Backups
+backups/
+*.tar.gz
+*.tar.gz.gpg
+
+# Docker
+.docker/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+*.key
+*.pem
+secrets/
+.env
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
